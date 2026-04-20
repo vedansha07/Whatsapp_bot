@@ -28,3 +28,5 @@ GROUP_NAME=HR Hiring Team
 - Logs `Bot is ready` when connected.
 - Listens to all incoming messages and logs sender, chat/group name, and text.
 - Does not filter out your own messages, so you can test from your own number.
+
+# Whatsapp_HR_bot
