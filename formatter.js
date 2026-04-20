@@ -13,7 +13,7 @@ function formatIssueLine(issue) {
   const summary = issue.issue_summary || "No summary";
   const seen = Number(issue.frequency || 1);
   const lastSeen = formatDate(issue.last_seen);
-  return `• [${category}] ${summary} (seen ${seen} times, last seen: ${lastSeen})`;
+  return `- [${category}] ${summary} (seen ${seen} times, last seen: ${lastSeen})`;
 }
 
 function formatIssuesList(title, issues) {
@@ -41,7 +41,7 @@ function formatHelpText() {
     "help"
   ];
 
-  return `Available commands:\n${commands.map((cmd) => `• ${cmd}`).join("\n")}\nTotal commands: ${commands.length}`;
+  return `Available commands:\n${commands.map((cmd) => `- ${cmd}`).join("\n")}\nTotal commands: ${commands.length}`;
 }
 
 module.exports = {
