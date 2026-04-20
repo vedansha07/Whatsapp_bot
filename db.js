@@ -26,6 +26,18 @@ db.exec(`
     sender TEXT NOT NULL,
     issue_detected INTEGER NOT NULL DEFAULT 0 CHECK (issue_detected IN (0, 1))
   );
+
+  CREATE TABLE IF NOT EXISTS conversations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sender TEXT NOT NULL,
+    state TEXT NOT NULL,
+    selected_category TEXT,
+    issue_description TEXT,
+    last_message TEXT,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    resolved INTEGER NOT NULL DEFAULT 0 CHECK (resolved IN (0, 1))
+  );
 `);
 
 const normalizeText = (value) => (value || "").toString().trim().toLowerCase();
@@ -74,6 +86,37 @@ const insertMessageLogStmt = db.prepare(`
     @timestamp,
     @sender,
     @issue_detected
+  )
+`);
+
+const getConversationStmt = db.prepare(`
+  SELECT *
+  FROM conversations
+  WHERE sender = ?
+    AND resolved = 0
+  ORDER BY datetime(updated_at) DESC
+  LIMIT 1
+`);
+
+const insertConversationStmt = db.prepare(`
+  INSERT INTO conversations (
+    sender,
+    state,
+    selected_category,
+    issue_description,
+    last_message,
+    created_at,
+    updated_at,
+    resolved
+  ) VALUES (
+    @sender,
+    @state,
+    @selected_category,
+    @issue_description,
+    @last_message,
+    @created_at,
+    @updated_at,
+    @resolved
   )
 `);
 
@@ -263,6 +306,90 @@ function getRepeatedIssues(minFreq = 2) {
     .all(threshold);
 }
 
+function getConversation(sender) {
+  if (!sender || !sender.toString().trim()) {
+    throw new Error("sender is required.");
+  }
+  return getConversationStmt.get(sender.toString().trim()) || null;
+}
+
+function createConversation(sender, issueDescription) {
+  if (!sender || !sender.toString().trim()) {
+    throw new Error("sender is required.");
+  }
+
+  const now = new Date().toISOString();
+  const safeSender = sender.toString().trim();
+  const safeIssueDescription = (issueDescription || "").toString().trim();
+
+  const existing = getConversation(safeSender);
+  if (existing) return existing;
+
+  const result = insertConversationStmt.run({
+    sender: safeSender,
+    state: "awaiting_category",
+    selected_category: null,
+    issue_description: safeIssueDescription || null,
+    last_message: safeIssueDescription || null,
+    created_at: now,
+    updated_at: now,
+    resolved: 0
+  });
+
+  return db.prepare("SELECT * FROM conversations WHERE id = ?").get(result.lastInsertRowid) || null;
+}
+
+function updateConversation(sender, updates = {}) {
+  const existing = getConversation(sender);
+  if (!existing) return null;
+
+  const allowedFields = ["state", "selected_category", "issue_description", "last_message", "resolved"];
+  const setParts = [];
+  const params = { id: existing.id, updated_at: new Date().toISOString() };
+
+  for (const field of allowedFields) {
+    if (Object.prototype.hasOwnProperty.call(updates, field)) {
+      setParts.push(`${field} = @${field}`);
+      if (field === "resolved") {
+        params[field] = updates[field] ? 1 : 0;
+      } else if (updates[field] === undefined) {
+        params[field] = null;
+      } else {
+        params[field] = updates[field];
+      }
+    }
+  }
+
+  setParts.push("updated_at = @updated_at");
+
+  db.prepare(`UPDATE conversations SET ${setParts.join(", ")} WHERE id = @id`).run(params);
+  return db.prepare("SELECT * FROM conversations WHERE id = ?").get(existing.id) || null;
+}
+
+function resolveConversation(sender) {
+  const existing = getConversation(sender);
+  if (!existing) return null;
+
+  const now = new Date().toISOString();
+  db.prepare("UPDATE conversations SET resolved = 1, updated_at = ? WHERE id = ?").run(now, existing.id);
+  return db.prepare("SELECT * FROM conversations WHERE id = ?").get(existing.id) || null;
+}
+
+function getStaleConversations(minutesOld) {
+  const parsedMinutes = Math.max(1, Number(minutesOld) || 30);
+  return db
+    .prepare(
+      `
+      SELECT *
+      FROM conversations
+      WHERE resolved = 0
+        AND datetime(updated_at) <= datetime('now', ?)
+      ORDER BY datetime(updated_at) ASC
+    `
+    )
+    .all(`-${parsedMinutes} minutes`);
+}
+
 module.exports = {
   insertOrUpdateIssue,
   logMessage,
@@ -271,5 +398,10 @@ module.exports = {
   getTopIssues,
   getNewIssues,
   getIssuesByCategory,
-  getRepeatedIssues
+  getRepeatedIssues,
+  getConversation,
+  createConversation,
+  updateConversation,
+  resolveConversation,
+  getStaleConversations
 };
