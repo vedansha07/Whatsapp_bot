@@ -32,3 +32,5 @@ GROUP_NAME=HR Hiring Team
 # Whatsapp_HR_bot
 
 # Bot_Whatsapp
+
+# Whatsapp_bot
