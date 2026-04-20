@@ -30,3 +30,5 @@ GROUP_NAME=HR Hiring Team
 - Does not filter out your own messages, so you can test from your own number.
 
 # Whatsapp_HR_bot
+
+# Bot_Whatsapp
