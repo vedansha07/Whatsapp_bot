@@ -2,12 +2,25 @@ require("dotenv").config();
 
 const qrcode = require("qrcode-terminal");
 const { Client, LocalAuth } = require("whatsapp-web.js");
-const { logMessage, insertOrUpdateIssue, getAllIssues, getNewIssues } = require("./db");
+const {
+  logMessage,
+  insertOrUpdateIssue,
+  getAllIssues,
+  getNewIssues,
+  getConversation,
+  resolveConversation
+} = require("./db");
 const { extractIssue } = require("./extractor");
 const { handleCommand } = require("./commands");
+const { advanceConversation } = require("./conversationManager");
 
 const groupName = process.env.GROUP_NAME;
 const botName = process.env.BOT_NAME;
+const hrMemberNumbers = (process.env.HR_MEMBER_NUMBERS || "")
+  .split(",")
+  .map((item) => item.replace(/\D/g, "").trim())
+  .filter(Boolean);
+const hrMemberSet = new Set(hrMemberNumbers);
 
 if (!groupName || !botName) {
   console.error("Missing required env variables: GROUP_NAME and/or BOT_NAME");
@@ -79,10 +92,12 @@ client.on("ready", () => {
 client.on("message", async (message) => {
   try {
     const chat = await message.getChat();
+    let senderContact = null;
 
     let sender = "Unknown";
     try {
       const contact = await message.getContact();
+      senderContact = contact;
       sender = contact.pushname || contact.name || contact.number || message.from;
     } catch (contactError) {
       sender = message.from || "Unknown";
@@ -90,15 +105,21 @@ client.on("message", async (message) => {
 
     const chatName = chat.name || "(No chat name)";
     const text = message.body || "";
+    const senderId = message.author || message.from || "";
+    const senderNumberFromContact = (senderContact?.number || "").toString().replace(/\D/g, "");
+    const senderNumberFromId = senderId.split("@")[0].replace(/\D/g, "");
+    const senderNumber = senderNumberFromContact || senderNumberFromId;
 
     const isMonitoredGroup = chat.isGroup && chatName === groupName;
     if (!isMonitoredGroup) return;
+    if (message.fromMe) return;
 
     console.log(`[MONITORED GROUP] ${chatName} | From: ${sender} | Message: ${text}`);
 
     const mentionToken = `@${botName}`.toLowerCase();
     const lowerText = text.toLowerCase();
     const hasBotMention = lowerText.includes(mentionToken);
+    const isHrMember = hrMemberSet.has(senderNumber);
 
     if (hasBotMention) {
       const mentionRegex = new RegExp(`@${botName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "ig");
@@ -123,20 +144,30 @@ client.on("message", async (message) => {
       }
 
       const commandReply = handleCommand(strippedCommand, client, message);
-
       if (commandReply) {
         await message.reply(commandReply);
-      } else {
-        await message.reply(`Command not recognized. Type @${botName} help`);
+        logMessage({
+          message: text,
+          timestamp: new Date().toISOString(),
+          sender,
+          issue_detected: 0
+        });
+        return;
       }
 
-      logMessage({
-        message: text,
-        timestamp: new Date().toISOString(),
-        sender,
-        issue_detected: 0
-      });
-      return;
+      if (senderId) {
+        const activeConversation = getConversation(senderId);
+        if (activeConversation) {
+          resolveConversation(senderId);
+        }
+        const conversationInput = strippedCommand || text;
+        await advanceConversation(senderId, conversationInput, client, chat.id?._serialized);
+      }
+    } else if (senderId) {
+      const activeConversation = getConversation(senderId);
+      if (activeConversation) {
+        await advanceConversation(senderId, text, client, chat.id?._serialized);
+      }
     }
 
     const extracted = await extractIssue(text);

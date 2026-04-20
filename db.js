@@ -16,7 +16,8 @@ db.exec(`
     frequency INTEGER NOT NULL DEFAULT 1,
     first_seen TEXT NOT NULL,
     last_seen TEXT NOT NULL,
-    resolution_hint TEXT
+    resolution_hint TEXT,
+    resolved INTEGER NOT NULL DEFAULT 0 CHECK (resolved IN (0, 1))
   );
 
   CREATE TABLE IF NOT EXISTS message_log (
@@ -40,6 +41,20 @@ db.exec(`
   );
 `);
 
+function ensureColumnExists(tableName, columnName, alterSql) {
+  const columns = db.prepare(`PRAGMA table_info(${tableName})`).all();
+  const exists = columns.some((column) => column.name === columnName);
+  if (!exists) {
+    db.exec(alterSql);
+  }
+}
+
+ensureColumnExists(
+  "issues",
+  "resolved",
+  "ALTER TABLE issues ADD COLUMN resolved INTEGER NOT NULL DEFAULT 0 CHECK (resolved IN (0, 1));"
+);
+
 const normalizeText = (value) => (value || "").toString().trim().toLowerCase();
 
 const insertIssueStmt = db.prepare(`
@@ -51,7 +66,8 @@ const insertIssueStmt = db.prepare(`
     frequency,
     first_seen,
     last_seen,
-    resolution_hint
+    resolution_hint,
+    resolved
   ) VALUES (
     @raw_message,
     @category,
@@ -60,7 +76,8 @@ const insertIssueStmt = db.prepare(`
     @frequency,
     @first_seen,
     @last_seen,
-    @resolution_hint
+    @resolution_hint,
+    @resolved
   )
 `);
 
@@ -71,7 +88,8 @@ const updateIssueStmt = db.prepare(`
     last_seen = @last_seen,
     raw_message = @raw_message,
     candidate_name = @candidate_name,
-    resolution_hint = @resolution_hint
+    resolution_hint = @resolution_hint,
+    resolved = @resolved
   WHERE id = @id
 `);
 
@@ -149,7 +167,8 @@ function insertOrUpdateIssue(data) {
       last_seen: now,
       raw_message: data.raw_message || existing.raw_message,
       candidate_name: data.candidate_name || existing.candidate_name || null,
-      resolution_hint: data.resolution_hint || existing.resolution_hint || null
+      resolution_hint: data.resolution_hint || existing.resolution_hint || null,
+      resolved: data.resolved !== undefined ? (data.resolved ? 1 : 0) : Number(existing.resolved || 0)
     });
 
     return {
@@ -168,6 +187,8 @@ function insertOrUpdateIssue(data) {
     first_seen: data.first_seen || now,
     last_seen: now,
     resolution_hint: data.resolution_hint || null
+    ,
+    resolved: data.resolved ? 1 : 0
   });
 
   return {
