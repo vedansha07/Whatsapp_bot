@@ -1,0 +1,9 @@
+node_modules/
+.env
+.wwebjs_auth/
+.wwebjs_cache/
+hr_bot.db
+hr_bot.db-shm
+hr_bot.db-wal
+.DS_Store
+*.log
