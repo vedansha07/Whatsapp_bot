@@ -2,14 +2,16 @@
 
 A WhatsApp-based conversational support bot for recruitment teams. It runs on your own WhatsApp account, silently listens to every message in the configured group, auto-detects candidate issues using Groq AI, stores them in SQLite — and when tagged, responds intelligently to both HR admin queries and individual candidate support conversations.
 
+> **Bot name is fully configurable** — set `BOT_NAME` in your `.env` file to any name you want. All `@BOT_NAME` references in this guide refer to whatever name you configure.
+
 ---
 
 ## Table of Contents
 
 - [How It Works](#how-it-works)
 - [Feature 1 — Passive Issue Listener](#feature-1--passive-issue-listener)
-- [Feature 2 — HR Admin Commands (@shekhar)](#feature-2--hr-admin-commands-shekhar)
-- [Feature 3 — Conversational Support Bot (@WhatsApp JID)](#feature-3--conversational-support-bot-whatsapp-jid)
+- [Feature 2 — HR Admin Commands](#feature-2--hr-admin-commands)
+- [Feature 3 — Conversational Support Bot](#feature-3--conversational-support-bot)
 - [Installation](#installation)
 - [Environment Setup](#environment-setup)
 - [First Run](#first-run)
@@ -25,71 +27,71 @@ A WhatsApp-based conversational support bot for recruitment teams. It runs on yo
 The bot operates in **three modes simultaneously**:
 
 1. **Passive Listener** — reads every group message and extracts issues silently using AI.
-2. **HR Admin Mode** — when tagged with `@shekhar <command>`, returns data from the issue database.
-3. **Candidate Support Mode** — when tagged with the operator's WhatsApp JID, starts a guided support conversation with the candidate.
+2. **HR Admin Mode** — when tagged with `@BOT_NAME <command>`, returns data from the issue database.
+3. **Candidate Support Mode** — when tagged via the operator's WhatsApp JID, starts a guided multi-step support conversation.
 
 ---
 
 ## Feature 1 — Passive Issue Listener
 
-The bot **hears every conversation** in the monitored WhatsApp group. It doesn't need to be tagged. For every message, it:
+The bot **hears every conversation** in the monitored group. It doesn't need to be tagged. For every message, it:
 
-1. Sends the message to Groq AI (`llama-3.1-8b-instant`) for issue detection.
+1. Sends the message text to Groq AI (`llama-3.1-8b-instant`) for issue detection.
 2. If an issue is identified, saves it to the `issues` table with category, summary, and frequency tracking.
-3. Logs all messages (issue or not) to the `message_log` table.
+3. Logs all messages (issue or not) to `message_log`.
 
 This means the HR team gets a live database of all candidate problems — even ones never explicitly reported to the bot.
 
 ---
 
-## Feature 2 — HR Admin Commands (`@shekhar`)
+## Feature 2 — HR Admin Commands
 
-HR team members can query the issue database at any time by tagging the bot with `@shekhar <command>` in the group.
+Tag the bot with `@BOT_NAME <command>` in the monitored group to query the issue database.
+
+> **`BOT_NAME` is set in your `.env` file.** For example, if you set `BOT_NAME=shekhar`, the trigger is `@shekhar`. Change it to any name by updating `.env`.
 
 ### Available Commands
 
 | Command | Description |
 |---|---|
-| `@shekhar help` | Lists all available commands |
-| `@shekhar show all issues` | All tracked issues with frequency and last seen date |
-| `@shekhar top issues` | Top 5 most frequently reported issues |
-| `@shekhar new issues` | Issues reported in the last 7 days |
-| `@shekhar issues this month` | Issues from the last 30 days |
-| `@shekhar interview issues` | Issues filtered by Interview category |
-| `@shekhar onboarding issues` | Issues filtered by Onboarding category |
-| `@shekhar payment issues` | Issues filtered by Payment/Stipend category |
-| `@shekhar repeated problems` | Issues seen 3 or more times |
-| `@shekhar test summary` | Daily snapshot: total issues, new today, top repeated |
+| `@BOT_NAME help` | Lists all available commands |
+| `@BOT_NAME show all issues` | All tracked issues with frequency and last seen date |
+| `@BOT_NAME top issues` | Top 5 most frequently reported issues |
+| `@BOT_NAME new issues` | Issues reported in the last 7 days |
+| `@BOT_NAME issues this month` | Issues from the last 30 days |
+| `@BOT_NAME interview issues` | Issues filtered by Interview category |
+| `@BOT_NAME onboarding issues` | Issues filtered by Onboarding category |
+| `@BOT_NAME payment issues` | Issues filtered by Payment/Stipend category |
+| `@BOT_NAME repeated problems` | Issues seen 3 or more times |
+| `@BOT_NAME test summary` | Daily snapshot: total issues, new today, top repeated |
 
 ### Screenshots
 
-> **`@shekhar help`** — command menu
+> **`@BOT_NAME help`** — lists all commands; **`@BOT_NAME show all issues`** — returns logged issues from the database
 
-![Help command showing available commands list](screenshots/help_command.jpg)
+![Help command and show all issues command in the HR group](screenshots/help_command.jpg)
 
-> **`@shekhar show all issues`** — querying the issue database
-
-![Show all issues command displaying logged candidate issues](screenshots/show_all_issues.jpg)
+![Show all issues displaying multiple logged candidate issues](screenshots/show_all_issues.jpg)
 
 ---
 
-## Feature 3 — Conversational Support Bot (WhatsApp JID)
+## Feature 3 — Conversational Support Bot
 
-This is the candidate-facing support system. It's triggered using the **operator's WhatsApp JID** — not a keyword like `@shekhar`, but your actual WhatsApp mention (e.g. `@Vedansha Srivastava`).
+This is the candidate-facing support system. It is triggered using the **operator's WhatsApp JID** — i.e., your actual WhatsApp mention (e.g. `@Vedansha Srivastava`), not a keyword.
 
-### How Tagging via JID Works
+### How Tagging via WhatsApp JID Works
 
-In WhatsApp, when you type `@` in a group chat, your contacts pop up. The operator's phone number is set in `.env` as `BOT_NAME`, and when someone selects the operator's contact from that list, it creates a JID-based mention. This is how `@Vedansha Srivastava` in the screenshot triggers the support flow.
+When someone types `@` in a WhatsApp group, their contacts appear as suggestions. The bot operator's phone number (set as `BOT_NAME` in `.env`) corresponds to a real WhatsApp account, so when a candidate selects the operator's contact from the suggestion list, it creates a JID-based mention that triggers the support flow.
 
 ### Full Conversation Flow
 
-**Step 1 — Candidate tags the bot**
+**Step 1 — Candidate tags the bot with their JID**
 
 ```
 @Vedansha Srivastava help
 ```
 
-Bot responds with the category menu:
+Bot responds with the issue category menu:
 
 ```
 Hi! I'm here to help.
@@ -109,75 +111,103 @@ Please select your issue category by replying with a number:
 Reply with just the number.
 ```
 
-**Step 2 — Category selection**
+> *Screenshot: JID trigger → category menu → candidate selects Assessment*
 
-Candidate replies with a number (e.g. `3` for Interview).  
-Bot shows sub-issues for that category:
+![Candidate tags the bot via WhatsApp JID, category menu appears, then sub-category menu for Assessment](screenshots/jid_trigger_full_flow.jpg)
+
+---
+
+**Step 2 — Sub-category selection**
+
+After picking a category (e.g. `1` for Assessment / Test link), the bot shows specific issue options:
 
 ```
-You selected: Interview
+You selected: Assessment / Test link
 
 What exactly is the issue? Reply with a number:
 
-1. Link not received
-2. Technical issue during interview
-3. Unable to join interview room
-4. No interviewer joined
+1. I did not receive the test link
+2. Test link has expired
+3. Test link is not opening
+4. I submitted the test but got no confirmation
 5. Other (type your issue briefly)
+
+Reply with a number or type your issue.
 ```
 
-**Step 3 — Issue selection**
+Candidate picks a number → bot returns a pre-built or AI-generated step-by-step solution.
 
-Candidate picks a sub-issue. Bot replies with a pre-built or AI-generated step-by-step solution.
+> *Screenshot: Sub-category selection → solution → resolution prompt*
 
-**Step 4 — "Other" / Free-text path (Option 7)**
+![Sub-category selection showing Test link not opening solution](screenshots/subcategory_solution.jpg)
 
-If the candidate picks `7. Other` at the category level:
+---
+
+**Step 3 — "Other" / Free-text path (Option 7)**
+
+If the candidate picks `7` at the category level:
 
 ```
 Please describe your issue briefly in one message.
 ```
 
 Candidate types their issue freely (e.g. `Assessment not submitting`).  
-Bot sends it to **Groq AI** and responds with a custom step-by-step solution.
+Bot sends it to **Groq AI** and returns a custom step-by-step solution.
 
-**Step 5 — Resolution confirmation**
+> *Screenshot: "Other" flow — free-text input → AI-generated solution*
 
-After every solution:
+![Other flow showing free text input and Groq AI generated solution](screenshots/other_flow_solution.jpg)
+
+---
+
+**Step 4 — Resolution confirmation**
+
+After every solution, the bot asks:
 
 ```
 Did this help?
 Reply YES if resolved or NO if you still need help.
 ```
 
-- **YES** → Issue marked resolved. Bot sends a closing message.
-- **NO** → Issue is escalated to the admin number configured in `.env`.
+- **YES** → Issue marked resolved. Bot sends a closing message:
 
-**Step 6 — Escalation (if unresolved)**
+```
+Great! Glad your issue is resolved.
+If you face any other issue, feel free to tag me anytime.
+```
+
+> *Screenshot: Candidate replies YES → resolved*
+
+![Candidate replies YES and bot confirms resolution](screenshots/resolved_confirmation.jpg)
+
+---
+
+**Step 5 — Escalation on NO**
+
+If the candidate replies **NO**:
 
 ```
 I understand, let me escalate this to the HR team.
 Someone will get back to you shortly.
 
-Your issue has been flagged as: Assessment not submitting
-Reference: #14
+Your issue has been flagged as: Test link not opening
+Reference: #13
 ```
 
-A private WhatsApp message is also sent to `BOT_ADMIN_NUMBER` with the sender details and issue summary, so a human can follow up directly.
+A **private WhatsApp alert** is simultaneously sent to the `BOT_ADMIN_NUMBER` configured in `.env`:
 
-### Screenshots
+```
+Escalation alert
+Reference: #13
+Sender: 1231066664382575@lid
+Issue: Test link not opening
+```
 
-> **Triggering the support flow** — `@Vedansha Srivastava help` opens the category menu
+> *Screenshot: Escalation message in group → admin receives private alert*
 
-![Tagging with WhatsApp JID triggering the category selection menu](screenshots/jid_trigger_category.jpg)
+![Candidate replies NO and bot sends escalation message with reference number](screenshots/escalation_message.jpg)
 
-> **"Other" flow** — candidate types a custom issue, Groq AI generates a solution
-
-![Other category flow showing free text input and AI-generated solution](screenshots/other_flow_solution.jpg)
-
-> **Resolution confirmed** — candidate replies YES, bot closes the conversation
-
-![Candidate replies YES and bot sends resolved confirmation message](screenshots/resolved_confirmation.jpg)
+![Admin's private chat showing multiple escalation alerts with reference numbers and issue details](screenshots/escalation_admin_alerts.jpg)
 
 ---
 
@@ -189,10 +219,10 @@ Whatsapp_bot/
   conversationManager.js  # Guided support conversation state machine
   db.js                   # SQLite database layer (issues, conversations, message log)
   extractor.js            # Groq-powered passive issue extraction
-  commands.js             # HR admin query commands (@shekhar)
+  commands.js             # HR admin query commands
   formatter.js            # Text formatting helpers
   scheduler.js            # Stale conversation cleanup scheduler
-  screenshots/            # README screenshots
+  screenshots/            # README demo screenshots
   .env                    # Your environment variables (not committed)
   .env.example            # Environment variable template
   package.json
@@ -238,10 +268,10 @@ HR_MEMBER_NUMBERS=919111111111,919222222222
 
 | Variable | Description |
 |---|---|
-| `GROUP_NAME` | Exact WhatsApp group title (copy from Group Info — case and emoji sensitive) |
-| `BOT_NAME` | The name used to mention the bot in the group with `@`, **without** the `@` symbol |
+| `GROUP_NAME` | Exact WhatsApp group title — copy from Group Info (case and emoji sensitive) |
+| `BOT_NAME` | The name used as the command trigger (`@BOT_NAME`). Set to your preferred name without `@` |
 | `GROQ_API_KEY` | Your Groq API key from [console.groq.com](https://console.groq.com/keys) |
-| `BOT_ADMIN_NUMBER` | Phone number (with country code, no `+`) to receive escalation alerts privately |
+| `BOT_ADMIN_NUMBER` | Phone number (with country code, no `+`) to receive private escalation alerts |
 | `HR_MEMBER_NUMBERS` | Comma-separated HR staff numbers — bot distinguishes them from candidates |
 
 ---
@@ -304,11 +334,11 @@ pm2 stop hr-bot
 
 **2. Bot doesn't respond to `@BOT_NAME` commands**
 - Cause: `BOT_NAME` mismatch between `.env` and how members actually mention the contact.
-- Fix: Set the exact name without `@` in `.env` and restart.
+- Fix: Set the exact mention name (no `@`) in `.env` and restart.
 
 **3. Bot ignores all group messages**
 - Cause: `GROUP_NAME` mismatch.
-- Fix: Copy the exact group title from Group Info (including spaces, case, and emojis), restart.
+- Fix: Copy exact group title from Group Info (including spaces, case, emojis), restart.
 
 **4. Escalation alert not sent to admin**
 - Cause: `BOT_ADMIN_NUMBER` missing or incorrectly formatted.
